@@ -1,8 +1,8 @@
 from config import BOT_TOKEN
+from constants_and_etc import *
 
-import logging
 from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -11,57 +11,15 @@ from telegram.ext import (
     filters,
 )
 
-COMMAND_START = '/start'
-COMMAND_PROFILE = '/profile'
-COMMAND_SET_BALANCE = '/set_balance'
-COMMAND_SET_LIMIT = '/set_limit'
-COMMAND_SET_GENERAL_LIMIT = '/set_general_limit'
-COMMAND_STATS = '/stats'
-COMMAND_CANCEL = '/cancel'
 
-
-class UserState:
-    NONE = 'none'
-    SETTING_BALANCE = 'setting_balance'
-    SETTING_LIMIT_AMOUNT = 'setting_limit_amount'
-    SETTING_LIMIT_PERIOD = 'setting_limit_period'
-    SETTING_GENERAL_LIMIT_AMOUNT = 'setting_general_limit_amount'
-    SETTING_GENERAL_LIMIT_PERIOD = 'setting_general_limit_period'
-
-
-LIMIT_PERIODS = {
-    "день": "day",
-    "неделя": "week",
-    "месяц": "month",
-    "год": "year"
-}
-
-USER_STATES = {}
-USER_DATA = {}
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-reply_keyboard = [
-    [COMMAND_START],
-    [COMMAND_PROFILE, COMMAND_STATS],
-    [COMMAND_SET_BALANCE],
-    [COMMAND_SET_LIMIT, COMMAND_SET_GENERAL_LIMIT],
-    [COMMAND_CANCEL]
-]
-markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)
-
-
-def calculate_period_end(period_key: str, from_date: datetime) -> datetime:
-    if period_key == "day":
+def calculate_period_end(period_key, from_date):
+    if period_key == "день":
         return from_date + timedelta(days=1)
-    elif period_key == "week":
-        return from_date + timedelta(weeks=1)
-    elif period_key == "month":
+    elif period_key == "неделя":
+        return from_date + timedelta(days=7)
+    elif period_key == "месяц":
         return from_date + timedelta(days=30)
-    elif period_key == "year":
+    elif period_key == "год":
         return from_date + timedelta(days=365)
     else:
         return from_date
@@ -89,7 +47,7 @@ async def profile(update: Update, context):
          limits.items()]) if limits else "не заданы"
 
     await update.message.reply_html(
-        f'{user.mention_html()}\n\nБаланс: {balance}\nЛимиты:\n{limit_info}'
+        f'{user.mention_html()}\n\nБаланс: {balance} 💰\n\nЛимиты:\n{limit_info}'
     )
 
 
@@ -117,22 +75,6 @@ async def set_general_limit(update: Update, context):
     )
 
 
-async def set_limit_period(update: Update, context):
-    user_id = update.effective_user.id
-    USER_STATES[user_id] = UserState.SETTING_LIMIT_PERIOD
-    await update.message.reply_text(
-        'Выберите период для установки лимита: день, неделя, месяц или год. Например: "неделя".'
-    )
-
-
-async def set_general_limit_period(update: Update, context):
-    user_id = update.effective_user.id
-    USER_STATES[user_id] = UserState.SETTING_GENERAL_LIMIT_PERIOD
-    await update.message.reply_text(
-        'Выберите период для общего лимита: день, неделя, месяц или год. Например: "неделя".'
-    )
-
-
 async def cancel(update: Update, context):
     user_id = update.effective_user.id
     USER_STATES[user_id] = UserState.NONE
@@ -146,7 +88,7 @@ async def handle_text(update: Update, context):
     text = update.message.text.strip()
     state = USER_STATES.get(user_id, UserState.NONE)
 
-    if text.lower() == COMMAND_CANCEL:
+    if text == COMMAND_CANCEL:
         await cancel(update, context)
         return
 
@@ -156,7 +98,7 @@ async def handle_text(update: Update, context):
             USER_DATA.setdefault(user_id, {})['balance'] = balance
             USER_STATES[user_id] = UserState.NONE
             await update.message.reply_text(
-                f'Текущий баланс успешно обновлён: {balance:.2f}', reply_markup=markup
+                f'Текущий баланс успешно обновлён: {balance:.2f} 💰', reply_markup=markup
             )
         except ValueError:
             await update.message.reply_text(
@@ -173,11 +115,11 @@ async def handle_text(update: Update, context):
                                                             'period_end': None}
             USER_STATES[user_id] = UserState.SETTING_LIMIT_PERIOD
             await update.message.reply_text(
-                'Теперь выберите период для этого лимита: день, неделя, месяц или год.', reply_markup=markup
+                'Теперь выберите период для этого лимита:', reply_markup=period_markup
             )
         except ValueError:
             await update.message.reply_text(
-                'Неверный формат. Пожалуйста, введите категорию и сумму лимита. Например: "еда 200".'
+                'Неверный формат. Пожалуйста, введите категорию и сумму лимита. Например: "еда 100".'
             )
         return
 
@@ -188,11 +130,11 @@ async def handle_text(update: Update, context):
             user_data.setdefault('general_limit', {'limit': limit, 'spent': 0.0, 'period': None, 'period_end': None})
             USER_STATES[user_id] = UserState.SETTING_GENERAL_LIMIT_PERIOD
             await update.message.reply_text(
-                'Теперь выберите период для общего лимита: день, неделя, месяц или год.', reply_markup=markup
+                'Теперь выберите период для общего лимита:', reply_markup=period_markup
             )
         except ValueError:
             await update.message.reply_text(
-                'Неверный формат. Пожалуйста, введите сумму общего лимита. Например: "200".'
+                'Неверный формат. Пожалуйста, введите сумму общего лимита. Например: "100".'
             )
         return
 
@@ -221,8 +163,7 @@ async def handle_text(update: Update, context):
             user_data = USER_DATA.setdefault(user_id, {})
             if 'general_limit' in user_data:
                 user_data['general_limit']['period'] = LIMIT_PERIODS[period]
-                user_data['general_limit']['period_end'] = calculate_period_end(LIMIT_PERIODS[period],
-                                                                                datetime.now())
+                user_data['general_limit']['period_end'] = calculate_period_end(LIMIT_PERIODS[period], datetime.now())
             USER_STATES[user_id] = UserState.NONE
             await update.message.reply_text(
                 f'Период для общего лимита установлен: {period}.', reply_markup=markup
@@ -243,8 +184,7 @@ async def handle_text(update: Update, context):
             )
             return
 
-        new_balance = balance - spend_amount
-        user_data['balance'] = new_balance
+        user_data['balance'] = balance - spend_amount
 
         if 'general_limit' in user_data:
             general_limit_data = user_data['general_limit']
@@ -256,18 +196,8 @@ async def handle_text(update: Update, context):
                     f'Потрачено: {general_limit_data["spent"]:.2f}.', reply_markup=markup
                 )
 
-        for category in user_data.get('limits', {}):
-            limit_data = user_data['limits'][category]
-            limit_data['spent'] += spend_amount
-
-            if limit_data['spent'] > limit_data['limit']:
-                await update.message.reply_text(
-                    f'⚠️ Внимание! Вы превысили установленный лимит {limit_data["limit"]:.2f} для категории "{category}".\n'
-                    f'Потрачено: {limit_data["spent"]:.2f}.', reply_markup=markup
-                )
-
         await update.message.reply_text(
-            f'Учтена трата: {spend_amount:.2f}\nНовый баланс: {new_balance:.2f}', reply_markup=markup
+            f'Учтена трата: {spend_amount:.2f} 💸\nНовый баланс: {balance - spend_amount:.2f} 💰', reply_markup=markup
         )
     except ValueError:
         try:
@@ -290,11 +220,11 @@ async def handle_text(update: Update, context):
                     )
             else:
                 await update.message.reply_text(
-                    f'Категория "{category}" не найдена. Пожалуйста, проверьте название категории.'
+                    f'Категория "{category}" не найдена.'
                 )
         except ValueError:
             await update.message.reply_text(
-                'Неверный формат. Пожалуйста, введите категорию и сумму. Например: "еда 50".'
+                'Неверный формат. Пожалуйста, введите категорию и сумму. Например: "еда 100".'
             )
 
 
@@ -311,17 +241,8 @@ async def stats(update: Update, context):
         return
 
     report = "📊 Статистика по вашему бюджету:\n\n"
-    for category, limit_data in limits.items():
-        limit = limit_data['limit']
-        spent = limit_data['spent']
-        period_end = limit_data['period_end']
 
-        period_end_str = period_end.strftime("%Y-%m-%d %H:%M:%S") if period_end else "не установлен"
-
-        report += (f"Категория: {category}\n"
-                   f"Лимит: {limit:.2f}\n"
-                   f"Потрачено: {spent:.2f}\n"
-                   f"Дата обновления лимита: {period_end_str}\n\n")
+    report += f"Баланс: {balance} 💰\n\n"
 
     if 'general_limit' in user_data:
         general_limit_data = user_data['general_limit']
@@ -329,17 +250,31 @@ async def stats(update: Update, context):
         general_spent = general_limit_data['spent']
         general_period_end = general_limit_data['period_end']
         general_period_end_str = general_period_end.strftime(
-            "%Y-%m-%d %H:%M:%S") if general_period_end else "не установлен"
+            "%Y.%m.%d, %H:%M:%S") if general_period_end else "не установлен"
+        exceeded_general = "✅" if general_spent <= general_limit else "⚠️"
 
         report += (f"Общий лимит:\n"
-                   f"Лимит: {general_limit:.2f}\n"
-                   f"Потрачено: {general_spent:.2f}\n"
+                   f"Лимит: {general_limit:.2f} 💵\n"
+                   f"Потрачено: {general_spent:.2f} {exceeded_general}\n"
                    f"Дата обновления общего лимита: {general_period_end_str}\n\n")
+
+    for category, limit_data in limits.items():
+        limit = limit_data['limit']
+        spent = limit_data['spent']
+        period_end = limit_data['period_end']
+
+        period_end_str = period_end.strftime("%Y.%m.%d, %H:%M:%S") if period_end else "не установлен"
+        exceeded = "✅" if spent <= limit else "⚠️"
+
+        report += (f"Категория: {category}\n"
+                   f"Лимит: {limit:.2f} 💳\n"
+                   f"Потрачено: {spent:.2f} {exceeded}\n"
+                   f"Дата обновления лимита: {period_end_str}\n\n")
 
     await update.message.reply_text(report, reply_markup=markup)
 
 
-def main() -> None:
+def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
