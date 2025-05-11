@@ -204,6 +204,24 @@ async def handle_text(update: Update, context):
             category, spend_str = text.split()
             spend_amount = float(spend_str.replace(',', '.'))
             user_data = USER_DATA.setdefault(user_id, {})
+
+            balance = user_data.get('balance')
+            if balance is None:
+                await update.message.reply_text(
+                    'Баланс не задан. Сначала задайте баланс через /set_balance.'
+                )
+                return
+            user_data['balance'] = balance - spend_amount
+
+            if 'general_limit' in user_data:
+                general_limit_data = user_data['general_limit']
+                general_limit_data['spent'] += spend_amount
+                if general_limit_data['spent'] > general_limit_data['limit']:
+                    await update.message.reply_text(
+                        f'⚠️ Внимание! Вы превысили установленный общий лимит {general_limit_data["limit"]:.2f}.\n'
+                        f'Потрачено: {general_limit_data["spent"]:.2f}.'
+                    )
+
             limits = user_data.get('limits', {})
             if category in limits:
                 limit_data = limits[category]
@@ -212,16 +230,15 @@ async def handle_text(update: Update, context):
                 if limit_data['spent'] > limit_data['limit']:
                     await update.message.reply_text(
                         f'⚠️ Внимание! Вы превысили установленный лимит {limit_data["limit"]:.2f} для категории "{category}".\n'
-                        f'Потрачено: {limit_data["spent"]:.2f}.', reply_markup=markup
+                        f'Потрачено: {limit_data["spent"]:.2f}.'
                     )
-                else:
-                    await update.message.reply_text(
-                        f'Сумма {spend_amount:.2f} вычтена из лимита категории "{category}".', reply_markup=markup
-                    )
-            else:
-                await update.message.reply_text(
-                    f'Категория "{category}" не найдена.'
-                )
+
+            await update.message.reply_text(
+                f'Учтена трата: {spend_amount:.2f} 💸\n'
+                f'Категория: {category}\n'
+                f'Новый баланс: {balance - spend_amount:.2f} 💰',
+                reply_markup=markup
+            )
         except ValueError:
             await update.message.reply_text(
                 'Неверный формат. Пожалуйста, введите категорию и сумму. Например: "еда 100".'
