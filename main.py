@@ -10,6 +10,9 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+import requests
+import json
+from urllib.parse import quote
 
 
 def calculate_period_end(period_key, from_date):
@@ -23,6 +26,119 @@ def calculate_period_end(period_key, from_date):
         return from_date + timedelta(days=365)
     else:
         return from_date
+
+
+def generate_chart_url(user_data):
+    limits = user_data.get('limits', {})
+    if not limits:
+        return None
+
+    labels = []
+    spent_values = []
+    background_colors = [
+        'rgba(255, 99, 132, 0.7)',
+        'rgba(54, 162, 235, 0.7)',
+        'rgba(255, 206, 86, 0.7)',
+        'rgba(75, 192, 192, 0.7)',
+        'rgba(153, 102, 255, 0.7)'
+    ]
+
+    for category, data in limits.items():
+        labels.append(category)
+        spent_values.append(float(data['spent']))
+
+    chart_config = {
+        "type": "pie",
+        "data": {
+            "labels": labels,
+            "datasets": [{
+                "data": spent_values,
+                "backgroundColor": background_colors[:len(labels)]
+            }]
+        },
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Ваши расходы по категориям",
+                    "font": {"size": 16}
+                },
+                "legend": {
+                    "position": "right",
+                    "labels": {"font": {"size": 12}}
+                }
+            }
+        }
+    }
+
+    try:
+        json_config = json.dumps(chart_config, ensure_ascii=False)
+        base_url = "https://quickchart.io/chart"
+        return f"{base_url}?c={quote(json_config)}"
+    except Exception as e:
+        print(f"Ошибка при генерации URL графика: {e}")
+        return None
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_data = USER_DATA.get(user_id, {})
+
+    if not user_data:
+        await update.message.reply_text("❌ Нет данных для отображения.")
+        return
+
+    chart_url = None
+    if user_data.get('limits'):
+        try:
+            chart_url = generate_chart_url(user_data)
+            if chart_url:
+                response = requests.head(chart_url, timeout=5)
+                if response.status_code == 200:
+                    await update.message.reply_photo(
+                        photo=chart_url,
+                        caption="📊 Ваши расходы по категориям",
+                        parse_mode="HTML"
+                    )
+                else:
+                    raise Exception(f"Сервер вернул код {response.status_code}")
+        except Exception as e:
+            print(f"[Ошибка графика] {e}")
+            await update.message.reply_text(
+                "⚠️ Не удалось загрузить график. Показываю текстовую статистику..."
+            )
+
+    report = ["<b>📊 Статистика</b>"]
+
+    balance = user_data.get('balance', 0)
+    report.append(f"\n💰 <b>Баланс:</b> {balance:.2f} ₽")
+
+    if 'general_limit' in user_data:
+        gl = user_data['general_limit']
+        status = "⚠️ <b>ПРЕВЫШЕН</b>" if gl['spent'] > gl['limit'] else "✅ в норме"
+        period_end = gl.get('period_end', 'не установлена')
+        if isinstance(period_end, datetime):
+            period_end = period_end.strftime("%d.%m.%Y")
+
+        report.append(f"\n🧾 <b>Общий лимит:</b> {gl['spent']:.2f}/{gl['limit']:.2f} ₽ {status}")
+        report.append(f"📅 <i>Дата окончания:</i> {period_end}")
+
+    if user_data.get('limits'):
+        report.append("\n\n📌 <b>Лимиты по категориям:</b>")
+        for cat, data in user_data['limits'].items():
+            status = "⚠️" if data['spent'] > data['limit'] else "✅"
+            period_end = data.get('period_end', 'не установлена')
+            if isinstance(period_end, datetime):
+                period_end = period_end.strftime("%d.%m.%Y")
+
+            report.append(f"\n• <b>{cat.capitalize()}</b>: {data['spent']:.2f}/{data['limit']:.2f} ₽ {status}")
+            report.append(f"  📅 <i>Дата окончания:</i> {period_end}")
+
+    await update.message.reply_text(
+        "\n".join(report),
+        parse_mode="HTML",
+        reply_markup=markup
+    )
 
 
 async def start(update: Update, context):
@@ -204,13 +320,21 @@ async def handle_text(update: Update, context):
             category, spend_str = text.split()
             spend_amount = float(spend_str.replace(',', '.'))
             user_data = USER_DATA.setdefault(user_id, {})
-
             balance = user_data.get('balance')
+
             if balance is None:
                 await update.message.reply_text(
                     'Баланс не задан. Сначала задайте баланс через /set_balance.'
                 )
                 return
+
+            if 'limits' not in user_data or category not in user_data['limits']:
+                await update.message.reply_text(
+                    f'❌ Категория "{category}" не найдена. Сначала установите лимит для этой категории через /set_limit.',
+                    reply_markup=markup
+                )
+                return
+
             user_data['balance'] = balance - spend_amount
 
             if 'general_limit' in user_data:
@@ -222,16 +346,14 @@ async def handle_text(update: Update, context):
                         f'Потрачено: {general_limit_data["spent"]:.2f}.'
                     )
 
-            limits = user_data.get('limits', {})
-            if category in limits:
-                limit_data = limits[category]
-                limit_data['spent'] += spend_amount
+            limit_data = user_data['limits'][category]
+            limit_data['spent'] += spend_amount
 
-                if limit_data['spent'] > limit_data['limit']:
-                    await update.message.reply_text(
-                        f'⚠️ Внимание! Вы превысили установленный лимит {limit_data["limit"]:.2f} для категории "{category}".\n'
-                        f'Потрачено: {limit_data["spent"]:.2f}.'
-                    )
+            if limit_data['spent'] > limit_data['limit']:
+                await update.message.reply_text(
+                    f'⚠️ Внимание! Вы превысили установленный лимит {limit_data["limit"]:.2f} для категории "{category}".\n'
+                    f'Потрачено: {limit_data["spent"]:.2f}.'
+                )
 
             await update.message.reply_text(
                 f'Учтена трата: {spend_amount:.2f} 💸\n'
@@ -241,54 +363,9 @@ async def handle_text(update: Update, context):
             )
         except ValueError:
             await update.message.reply_text(
-                'Неверный формат. Пожалуйста, введите категорию и сумму. Например: "еда 100".'
+                'Неверный формат. Пожалуйста, введите категорию и сумму. Например: "еда 100".',
+                reply_markup=markup
             )
-
-
-async def stats(update: Update, context):
-    user_id = update.effective_user.id
-    user_data = USER_DATA.get(user_id, {})
-    balance = user_data.get('balance', None)
-    limits = user_data.get('limits', {})
-
-    if balance is None or not limits:
-        await update.message.reply_text(
-            'Данные по балансу или лимитам не заданы. Пожалуйста, сначала укажите их.'
-        )
-        return
-
-    report = "📊 Статистика по вашему бюджету:\n\n"
-
-    report += f"Баланс: {balance} 💰\n\n"
-
-    if 'general_limit' in user_data:
-        general_limit_data = user_data['general_limit']
-        general_limit = general_limit_data['limit']
-        general_spent = general_limit_data['spent']
-        general_period_end = general_limit_data['period_end']
-        general_period_end_str = general_period_end.strftime(
-            "%Y.%m.%d, %H:%M:%S") if general_period_end else "не установлен"
-        exceeded_general = "✅" if general_spent <= general_limit else "⚠️"
-
-        report += (f"Общий лимит:\n"
-                   f"Лимит: {general_limit:.2f} 💵\n"
-                   f"Потрачено: {general_spent:.2f} {exceeded_general}\n"
-                   f"Дата обновления общего лимита: {general_period_end_str}\n\n")
-
-    for category, limit_data in limits.items():
-        limit = limit_data['limit']
-        spent = limit_data['spent']
-        period_end = limit_data['period_end']
-
-        period_end_str = period_end.strftime("%Y.%m.%d, %H:%M:%S") if period_end else "не установлен"
-        exceeded = "✅" if spent <= limit else "⚠️"
-
-        report += (f"Категория: {category}\n"
-                   f"Лимит: {limit:.2f} 💳\n"
-                   f"Потрачено: {spent:.2f} {exceeded}\n"
-                   f"Дата обновления лимита: {period_end_str}\n\n")
-
-    await update.message.reply_text(report, reply_markup=markup)
 
 
 def main():
