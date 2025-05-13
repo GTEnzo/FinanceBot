@@ -6,6 +6,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# команды
 COMMAND_START = '/start'
 COMMAND_PROFILE = '/profile'
 COMMAND_SET_BALANCE = '/set_balance'
@@ -14,13 +15,16 @@ COMMAND_SET_LIMIT = '/set_limit'
 COMMAND_SET_GENERAL_LIMIT = '/set_general_limit'
 COMMAND_STATS = '/stats'
 COMMAND_CANCEL = '/cancel'
+COMMAND_HELP = '/help'
 
+# периоды
 PERIOD_DAY = 'день'
 PERIOD_WEEK = 'неделя'
 PERIOD_MONTH = 'месяц'
 PERIOD_YEAR = 'год'
 
 
+# состояние программы
 class UserState:
     NONE = 'none'
     SETTING_BALANCE = 'setting_balance'
@@ -46,7 +50,7 @@ reply_keyboard = [
     [COMMAND_PROFILE, COMMAND_STATS],
     [COMMAND_SET_BALANCE, COMMAND_ADD_TO_BALANCE],
     [COMMAND_SET_LIMIT, COMMAND_SET_GENERAL_LIMIT],
-    [COMMAND_CANCEL]
+    [COMMAND_CANCEL, COMMAND_HELP]
 ]
 markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)
 
