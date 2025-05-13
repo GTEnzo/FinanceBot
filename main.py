@@ -20,6 +20,7 @@ def main():
     application.add_handler(CommandHandler('set_limit', set_limit))
     application.add_handler(CommandHandler('set_general_limit', set_general_limit))
     application.add_handler(CommandHandler('stats', stats))
+    application.add_handler(CommandHandler('help', help))
     application.add_handler(CommandHandler('cancel', cancel))
 
     application.add_handler(
