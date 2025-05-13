@@ -2,6 +2,11 @@ from data.constants_and_etc import USER_DATA
 from datetime import datetime, timedelta
 
 
+def convert_time_format(period_end):
+    dt = datetime.strptime(period_end, '%Y-%m-%d %H:%M:%S.%f')
+    return dt.strftime('%d.%m.%Y %H:%M')
+
+
 def calculate_period_end(period_key, from_date):
     if period_key == 'день':
         return from_date + timedelta(days=1)
