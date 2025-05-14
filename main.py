@@ -15,11 +15,13 @@ def main():
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('profile', profile))
+    application.add_handler(CommandHandler('stats', stats))
     application.add_handler(CommandHandler('set_balance', set_balance))
     application.add_handler(CommandHandler('add_to_balance', add_to_balance))
     application.add_handler(CommandHandler('set_limit', set_limit))
     application.add_handler(CommandHandler('set_general_limit', set_general_limit))
-    application.add_handler(CommandHandler('stats', stats))
+    application.add_handler(CommandHandler('remove_limit', remove_limit))
+    application.add_handler(CommandHandler('remove_general_limit', remove_general_limit))
     application.add_handler(CommandHandler('help', help))
     application.add_handler(CommandHandler('cancel', cancel))
 
