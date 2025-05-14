@@ -9,11 +9,13 @@ logger = logging.getLogger(__name__)
 # команды
 COMMAND_START = '/start'
 COMMAND_PROFILE = '/profile'
+COMMAND_STATS = '/stats'
 COMMAND_SET_BALANCE = '/set_balance'
 COMMAND_ADD_TO_BALANCE = '/add_to_balance'
 COMMAND_SET_LIMIT = '/set_limit'
 COMMAND_SET_GENERAL_LIMIT = '/set_general_limit'
-COMMAND_STATS = '/stats'
+COMMAND_REMOVE_LIMIT = '/remove_limit'
+COMMAND_REMOVE_GENERAL_LIMIT = '/remove_general_limit'
 COMMAND_CANCEL = '/cancel'
 COMMAND_HELP = '/help'
 
@@ -33,6 +35,7 @@ class UserState:
     SETTING_LIMIT_PERIOD = 'setting_limit_period'
     SETTING_GENERAL_LIMIT_AMOUNT = 'setting_general_limit_amount'
     SETTING_GENERAL_LIMIT_PERIOD = 'setting_general_limit_period'
+    REMOVING_LIMIT = 'removing_limit'
 
 
 LIMIT_PERIODS = {
@@ -49,6 +52,7 @@ reply_keyboard = [
     [COMMAND_PROFILE, COMMAND_STATS],
     [COMMAND_SET_BALANCE, COMMAND_ADD_TO_BALANCE],
     [COMMAND_SET_LIMIT, COMMAND_SET_GENERAL_LIMIT],
+    [COMMAND_REMOVE_LIMIT, COMMAND_REMOVE_GENERAL_LIMIT],
     [COMMAND_CANCEL, COMMAND_HELP]
 ]
 markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)

@@ -217,6 +217,26 @@ async def set_general_limit(update: Update, context):
     )
 
 
+async def remove_general_limit(update: Update, context):
+    user_id = update.effective_user.id
+    # Удаляем общий лимит из базы данных
+    remove_gen_limit(user_id)
+    USER_STATES[user_id] = UserState.NONE
+    await update.message.reply_text(
+        'Общий лимит успешно удалён.', reply_markup=markup
+    )
+
+
+async def remove_limit(update: Update, context):
+    # Получаем ID пользователя, отправившего сообщение
+    user_id = update.effective_user.id
+    # Устанавливаем состояние пользователя в режим удаления лимитов
+    USER_STATES[user_id] = UserState.REMOVING_LIMIT
+    await update.message.reply_text(
+        'Напишите название лимита, которую вы хотите удалить.', reply_markup=markup
+    )
+
+
 async def cancel(update: Update, context):
     # Получаем ID пользователя, отправившего сообщение
     user_id = update.effective_user.id
@@ -244,8 +264,10 @@ async def help(update: Update, context):
  *Ввод в виде "категория сумма"* - Записать трату по категории (например: "еда 100")
 
 <b>Управление лимитами:</b>
-• /set_limit - Установить лимит для категории
+• /set_limit - Установить лимит с категорией
 • /set_general_limit - Установить общий лимит расходов
+• /remove_limit - Удалить лимит с категорией
+• /remove_general_limit - Удалить общий лимит расходов
 
 <b>Дополнительно:</b>
 • /cancel - Отменить текущую операцию
@@ -426,6 +448,31 @@ async def handle_text(update: Update, context):
             await update.message.reply_text(
                 '❌ Неверный период. Пожалуйста, выберите день, неделю, месяц или год.'
             )
+        return
+
+    # если состояние - выбор категории для удаления
+    if state == UserState.REMOVING_LIMIT:
+        # приводим текст к нижнему регистру
+        category = text.lower()
+        # получаем или создаем данные пользователя
+        data = import_limits(user_id)
+        if data:
+            data = data.replace("'", '"')
+            user_data = json.loads(data)
+        else:
+            user_data = {}
+
+        # проверяем, есть ли категория в данных пользователя
+        if 'limits' in user_data and category in user_data['limits']:
+            # удаляем лимит
+            del user_data['limits'][category]
+            # обновляем список лимитов
+            update_cat_limits(user_id, json.dumps(user_data))
+            await update.message.reply_text(
+                f'Лимит для категории "{category}" успешно удалён.', reply_markup=markup)
+        else:
+            await update.message.reply_text(
+                f'❌ Категория "{category}" не найдена в ваших лимитах.', reply_markup=markup)
         return
 
     # обработка обычных трат (не в состоянии настройки)
