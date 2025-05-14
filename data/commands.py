@@ -8,6 +8,7 @@ from telegram import Update
 
 
 async def start(update: Update, context):
+    # получаем объект пользователя
     user = update.effective_user
     create_or_import_user(f'{user['id']}')
     USER_STATES[user.id] = UserState.NONE
@@ -22,7 +23,6 @@ async def profile(update: Update, context):
     # получаем объект пользователя
     user = update.effective_user
     create_or_import_user(f'{user.id}')
-
     # получаем финансовые данные
     balance = import_balance(f'{user.id}')
     general_limit = import_general_limit(f'{user.id}')
@@ -62,7 +62,6 @@ async def profile(update: Update, context):
                 reply_markup=markup
             )
         else:
-            # если аватарки нет, отправляем только текст
             await update.message.reply_text(
                 caption,
                 parse_mode='HTML',
@@ -80,7 +79,6 @@ async def profile(update: Update, context):
 async def stats(update: Update, context):
     # получаем ID пользователя, который вызвал команду
     user_id = update.effective_user.id
-
     # получаем список его лимитов
     data = import_limits(user_id)
     if data:
