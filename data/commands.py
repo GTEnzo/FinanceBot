@@ -1,4 +1,3 @@
-from data.ORM.services import *
 from data.charts_generator import *
 from data.constants_and_etc import *
 from data.limits_functions import *
@@ -25,10 +24,15 @@ async def profile(update: Update, context):
     create_or_import_user(f'{user.id}')
 
     # получаем финансовые данные
-    data = USER_DATA.get(user.id, {})
     balance = import_balance(f'{user.id}')
     general_limit = import_general_limit(f'{user.id}')
-    limits = data.get('limits', {})
+    data = import_limits(user.id)
+    if data:
+        data = data.replace("'", '"')
+        user_data = json.loads(data)
+        limits = user_data.get('limits', {})
+    else:
+        limits = None
 
     # формируем текстовую часть сообщения
     balance_info = f'{float(balance):.2f} ₽' if balance is not None else 'Не задан'
@@ -36,7 +40,7 @@ async def profile(update: Update, context):
 
     # формируем список лимитов (только суммы без трат)
     limit_info = [f'• {category.capitalize()}: {limit_data['limit']:.2f} ₽'
-                  for category, limit_data in limits.items()]
+                  for category, limit_data in limits.items()] if limits else None
 
     caption = (
             f'👤 {user.mention_html()}\n\n'
@@ -77,8 +81,13 @@ async def stats(update: Update, context):
     # получаем ID пользователя, который вызвал команду
     user_id = update.effective_user.id
 
-    # достаем данные пользователя из глобального словаря USER_DATA
-    user_data = USER_DATA.get(user_id, {})
+    # получаем список его лимитов
+    data = import_limits(user_id)
+    if data:
+        data = data.replace("'", '"')
+        user_data = json.loads(data)
+    else:
+        user_data = {}
 
     # проверяем, есть ли у пользователя установленные лимиты
     if user_data.get('limits'):
@@ -253,8 +262,7 @@ async def help(update: Update, context):
 async def handle_text(update: Update, context):
     # получаем id пользователя из сообщения
     user_id = update.effective_user.id
-    # обновляем статус лимитов
-    update_limits()
+
     # получаем текст сообщения
     text = update.message.text.strip()
     # получаем текущее состояние пользователя или устанавливаем NONE
@@ -314,10 +322,19 @@ async def handle_text(update: Update, context):
             # преобразуем сумму в число
             limit = float(limit_str.replace(',', '.'))
             # получаем или создаем данные пользователя
-            user_data = USER_DATA.setdefault(user_id, {})
+            data = import_limits(user_id)
+            if data:
+                data = data.replace("'", '"')
+                user_data = json.loads(data)
+            else:
+                user_data = {}
             # создаем запись лимита для категории
-            user_data.setdefault('limits', {})[category] = {'limit': limit, 'spent': 0.0, 'period': None,
-                                                            'period_end': None}
+            user_data.setdefault('limits', {})[category] = {'limit': limit, 'spent': 0.0, 'period': '',
+                                                            'period_end': ''}
+
+            # обновляем список лимитов
+            update_cat_limits(user_id, f'{user_data}')
+
             # меняем состояние на выбор периода
             USER_STATES[user_id] = UserState.SETTING_LIMIT_PERIOD
             # просим выбрать период
@@ -337,16 +354,26 @@ async def handle_text(update: Update, context):
         period = text.lower()
         # проверяем, что период допустимый
         if period in LIMIT_PERIODS:
-            # получаем данные пользователя
-            user_data = USER_DATA.setdefault(user_id, {})
+            # получаем или создаем данные пользователя
+            data = import_limits(user_id)
+            if data:
+                data = data.replace("'", '"')
+                user_data = json.loads(data)
+            else:
+                user_data = {}
+
             # ищем категорию без периода
             for category in user_data.get('limits', {}):
-                if user_data['limits'][category]['period'] is None:
+                if user_data['limits'][category]['period'] == '':
                     # устанавливаем период
                     user_data['limits'][category]['period'] = LIMIT_PERIODS[period]
                     # рассчитываем дату окончания
                     user_data['limits'][category]['period_end'] = calculate_period_end(LIMIT_PERIODS[period],
                                                                                        datetime.now())
+
+                # обновляем список лимитов
+                update_cat_limits(user_id, f'{user_data}')
+
             # сбрасываем состояние
             USER_STATES[user_id] = UserState.NONE
             # отправляем подтверждение
@@ -408,10 +435,19 @@ async def handle_text(update: Update, context):
 
         # получаем текущий баланс
         balance = import_balance(user_id)
-        # получаем общий лимит
-        general_limit = import_general_limit(user_id)
-        # рассчитываем новый баланс
-        new_balance = balance - spend_amount
+
+        # проверяем, установлен ли баланс
+        if balance is None:
+            await update.message.reply_text(
+                '❌ Баланс не задан. Сначала задайте баланс через /set_balance.'
+            )
+            return
+
+        else:
+            # получаем общий лимит
+            general_limit = import_general_limit(user_id)
+            # рассчитываем новый баланс
+            new_balance = balance - spend_amount
 
         # проверяем, не уйдет ли баланс в минус
         if new_balance - spend_amount < 0:
@@ -445,10 +481,17 @@ async def handle_text(update: Update, context):
             category, spend_str = text.split()
             spend_amount = float(spend_str.replace(',', '.'))
 
-            # получаем данные пользователя
-            user_data = USER_DATA.setdefault(user_id, {})
+            # получаем список лимитов
+            data = import_limits(user_id)
+            if data:
+                data = data.replace("'", '"')
+                user_data = json.loads(data)
+            else:
+                user_data = {}
+
             # получаем баланс
             balance = import_balance(user_id)
+            general_limit = import_general_limit(user_id)
 
             # проверяем, установлен ли баланс
             if balance is None:
@@ -477,6 +520,19 @@ async def handle_text(update: Update, context):
                     f'Потрачено: {limit_data['spent']:.2f}.'
                 )
 
+            # проверяем, не уйдет ли баланс в минус
+            if balance - spend_amount < 0:
+                await update.message.reply_text(
+                    f'⚠️ Внимание! Ваш баланс меньше нуля.'
+                )
+
+            # проверяем превышение лимита
+            if general_limit[1] > general_limit[0]:
+                await update.message.reply_text(
+                    f'⚠️ Внимание! Вы превысили установленный общий лимит {general_limit[0]:.2f}.\n'
+                    f'Потрачено: {general_limit[1]:.2f}.', reply_markup=markup
+                )
+
             # отправляем отчет о трате
             await update.message.reply_text(
                 f'Учтена трата: {spend_amount:.2f}\n'
@@ -487,8 +543,9 @@ async def handle_text(update: Update, context):
             # обновляем баланс
             update_balance(user_id, balance - spend_amount),
             # обновляем общий лимит
-            general_limit = import_general_limit(user_id)
             update_general_limit(user_id, general_limit[0], spend_amount)
+            # обновляем список лимитов
+            update_cat_limits(user_id, f'{user_data}')
 
         except ValueError:
             # если формат не распознан

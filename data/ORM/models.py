@@ -15,6 +15,7 @@ class User(Base):
     spent = Column(Float)
     period = Column(String)
     period_end = Column(String)
+    limits = Column(String)
 
     def __repr__(self):
-        return f'<User  (id={self.id}, username={self.username}, balance={self.balance}, general_limit={self.general_limit}, spent={self.spent}, period={self.period}, period_end={self.period_end})>'
+        return f'<User  (id={self.id}, username={self.username}, balance={self.balance}, general_limit={self.general_limit}, spent={self.spent}, period={self.period}, period_end={self.period_end}, limits={self.limits})>'

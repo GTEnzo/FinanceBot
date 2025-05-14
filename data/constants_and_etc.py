@@ -43,7 +43,6 @@ LIMIT_PERIODS = {
 }
 
 USER_STATES = {}
-USER_DATA = {}
 
 reply_keyboard = [
     [COMMAND_START],

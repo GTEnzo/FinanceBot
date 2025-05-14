@@ -36,6 +36,16 @@ def import_general_limit(username):
     session.close()
 
 
+def import_limits(username):
+    session = Session()
+    user = session.query(User).filter_by(username=username).first()
+
+    if user:
+        session.commit()
+        return user.limits
+    session.close()
+
+
 def update_balance(username, new_balance):
     session = Session()
     user = session.query(User).filter_by(username=username).first()
@@ -67,6 +77,16 @@ def update_general_limit_period(username, new_period, new_period_end):
     if user:
         user.period = new_period
         user.period_end = new_period_end
+        session.commit()
+    session.close()
+
+
+def update_cat_limits(username, new_limits):
+    session = Session()
+    user = session.query(User).filter_by(username=username).first()
+
+    if user:
+        user.limits = new_limits
         session.commit()
     session.close()
 
