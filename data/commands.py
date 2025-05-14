@@ -1,16 +1,15 @@
+import requests
+from telegram import Update
+
 from data.charts_generator import *
 from data.constants_and_etc import *
 from data.limits_functions import *
-
-import requests
-from datetime import datetime
-from telegram import Update
 
 
 async def start(update: Update, context):
     # получаем объект пользователя
     user = update.effective_user
-    create_or_import_user(f'{user['id']}')
+    create_or_import_user(f'{user["id"]}')
     USER_STATES[user.id] = UserState.NONE
     await update.message.reply_html(
         f'<b>Привет, {user.mention_html()}! Я FinanceBot!</b>\n\n'
@@ -39,7 +38,7 @@ async def profile(update: Update, context):
     general_limit_info = f'{general_limit[0]:.2f} ₽' if general_limit[0] else 'Не задан'
 
     # формируем список лимитов (только суммы без трат)
-    limit_info = [f'• {category.capitalize()}: {limit_data['limit']:.2f} ₽'
+    limit_info = [f'• {category.capitalize()}: {limit_data["limit"]:.2f} ₽'
                   for category, limit_data in limits.items()] if limits else None
 
     caption = (
@@ -154,7 +153,7 @@ async def stats(update: Update, context):
                 period_end = period_end.strftime('%d.%m.%Y %H:%M')
 
             # добавляем информацию по категории
-            report.append(f'\n• <b>{cat.capitalize()}</b>: {data['spent']:.2f}/{data['limit']:.2f} ₽ {status}')
+            report.append(f'\n• <b>{cat.capitalize()}</b>: {data["spent"]:.2f}/{data["limit"]:.2f} ₽ {status}')
             report.append(f'  📅 Дата окончания: {period_end}')
 
     # если кроме заголовка в отчете ничего нет
@@ -320,6 +319,13 @@ async def handle_text(update: Update, context):
             # преобразуем текст в число
             adding = float(text.replace(',', '.'))
             # сбрасываем состояние
+
+            # импортируем баланс
+            balance = import_balance(user_id)
+            # если он не указан
+            if not balance:
+                update_balance(user_id, 0)
+
             USER_STATES[user_id] = UserState.NONE
             # добавляем сумму к балансу
             to_balance(user_id, adding)
@@ -451,7 +457,7 @@ async def handle_text(update: Update, context):
     # если состояние - выбор категории для удаления
     if state == UserState.REMOVING_LIMIT:
         # приводим текст к нижнему регистру
-        category = text.lower()
+        category = text
         # получаем или создаем данные пользователя
         data = import_limits(user_id)
         if data:
@@ -561,8 +567,8 @@ async def handle_text(update: Update, context):
             # проверяем превышение лимита категории
             if limit_data['spent'] > limit_data['limit']:
                 await update.message.reply_text(
-                    f'⚠️ Внимание! Вы превысили установленный лимит {limit_data['limit']:.2f} для категории "{category}".\n'
-                    f'Потрачено: {limit_data['spent']:.2f}.'
+                    f'⚠️ Внимание! Вы превысили установленный лимит {limit_data["limit"]:.2f} для категории "{category}".\n'
+                    f'Потрачено: {limit_data["spent"]:.2f}.'
                 )
 
             # проверяем, не уйдет ли баланс в минус
@@ -572,11 +578,12 @@ async def handle_text(update: Update, context):
                 )
 
             # проверяем превышение лимита
-            if general_limit[1] > general_limit[0]:
-                await update.message.reply_text(
-                    f'⚠️ Внимание! Вы превысили установленный общий лимит {general_limit[0]:.2f}.\n'
-                    f'Потрачено: {general_limit[1]:.2f}.', reply_markup=markup
-                )
+            if general_limit[0]:
+                if general_limit[1] > general_limit[0]:
+                    await update.message.reply_text(
+                        f'⚠️ Внимание! Вы превысили установленный общий лимит {general_limit[0]:.2f}.\n'
+                        f'Потрачено: {general_limit[1]:.2f}.', reply_markup=markup
+                    )
 
             # отправляем отчет о трате
             await update.message.reply_text(
@@ -588,7 +595,8 @@ async def handle_text(update: Update, context):
             # обновляем баланс
             update_balance(user_id, balance - spend_amount),
             # обновляем общий лимит
-            update_general_limit(user_id, general_limit[0], spend_amount)
+            if general_limit[0]:
+                update_general_limit(user_id, general_limit[0], spend_amount)
             # обновляем список лимитов
             update_cat_limits(user_id, f'{user_data}')
 

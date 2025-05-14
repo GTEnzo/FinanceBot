@@ -1,7 +1,7 @@
-from data.ORM.services import *
-
 import json
 from datetime import datetime, timedelta
+
+from data.ORM.services import *
 
 
 # ф-ия для читаемости даты окончания лимита
@@ -33,7 +33,7 @@ def update_limits(username):
 
         for category, limits in user_data['limits'].items():
             datetime1 = datetime.strptime(f'{datetime.now()}', "%Y-%m-%d %H:%M:%S.%f")
-            datetime2 = datetime.strptime(f'{limits['period_end']}', "%d.%m.%Y %H:%M")
+            datetime2 = datetime.strptime(f'{limits["period_end"]}', "%d.%m.%Y %H:%M")
             if datetime1 >= datetime2:
                 limits['spent'] = 0.0
                 limits['period_end'] = calculate_period_end(limits['period'], datetime.now())

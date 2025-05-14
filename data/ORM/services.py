@@ -99,3 +99,16 @@ def to_balance(username, adding):
         user.balance += adding
         session.commit()
     session.close()
+
+
+def remove_gen_limit(username):
+    session = Session()
+    user = session.query(User).filter_by(username=username).first()
+
+    if user:
+        user.general_limit = None
+        user.spent = None
+        user.period = None
+        user.period_end = None
+        session.commit()
+    session.close()
